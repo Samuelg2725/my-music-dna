@@ -185,7 +185,7 @@
         lucide.createIcons();
 
         const CLIENT_ID = "cfda3d4f47ec466190212bbfa1b31476";
-        const REDIRECT_URI = "https://samuelg2725.github.io/my-music-dna/index.html";
+        const REDIRECT_URI = window.location.origin + window.location.pathname;
         
         const firebaseConfig = {
             apiKey: "AIzaSyC0wvgOR6z_yBAe8gUZO7wzXnJLWaN0vXw",
@@ -616,7 +616,7 @@
             userProfile = {};
             previousSnapshot = null;
             localStorage.removeItem('code_verifier');
-            window.location = REDIRECT_URI.split('?')[0];
+            window.location = window.location.origin + window.location.pathname;
         };
         
         dataTypeButtons.forEach(button => button.addEventListener('click', () => {
@@ -643,9 +643,11 @@
         aiModal.addEventListener('click', (e) => {
             if (e.target === aiModal) aiModal.classList.add('hidden');
         });
-        
     </script>
 </body>
 </html>
+
+
+
 
 
