@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>My Music DNA</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- html2canvas library for sharing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
+        import { getFirestore, doc, getDoc, setDoc } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        window.firebase = { initializeApp, getFirestore, doc, getDoc, setDoc };
+    </script>
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #000000; /* Start with a solid black */
+            color: #FFFFFF;
+        }
+        .spotify-green { background-color: #1DB954; }
+        .spotify-green:hover { background-color: #1ED760; }
+        .gemini-blue { background-color: #4285F4; }
+        .gemini-blue:hover { background-color: #6a9ef7; }
+
+        /* Glassmorphism Card Style */
+        .glass-card { 
+            background-color: rgba(28, 28, 28, 0.7); 
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1); 
+            transition: all 0.2s ease-in-out;
+        }
+        .list-item-card:hover {
+            background-color: rgba(40, 40, 40, 0.9);
+            transform: translateY(-2px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .active-filter { background-color: rgba(255, 255, 255, 0.1); color: #FFFFFF; }
+        .inactive-filter { background-color: transparent; color: #B3B3B3; }
+        .inactive-filter:hover { background-color: rgba(255, 255, 255, 0.05); }
+
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .modal-backdrop { background-color: rgba(0,0,0,0.7); }
+        .spinner {
+            border: 4px solid rgba(255, 255, 255, 0.2);
+            border-left-color: #4285F4;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .genre-treemap { display: flex; flex-wrap: wrap; gap: 8px; height: 400px; }
+        .genre-block {
+            flex-grow: 1; flex-basis: 100px; border-radius: 8px; display: flex;
+            align-items: center; justify-content: center; text-align: center; padding: 8px;
+            font-weight: 600; color: white; text-transform: capitalize;
+            transition: all 0.3s ease; position: relative; overflow: hidden;
+        }
+        .genre-block:hover { transform: scale(1.05); z-index: 10; }
+        button:disabled { background-color: #333333; cursor: not-allowed; opacity: 0.5; }
+        .rank-change { font-size: 1.25rem; font-weight: bold; width: 28px; text-align: center; }
+        .rank-up { color: #1DB954; }
+        .rank-down { color: #E53E3E; }
+        .rank-new { color: #4285F4; }
+        .rank-same { color: #718096; }
+        
+        #share-card-container {
+            width: 400px; position: relative; border-radius: 1rem;
+            overflow: hidden; border: 1px solid #282828;
+        }
+        #share-card-bg {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background-size: cover; background-position: center;
+            filter: blur(20px) brightness(0.5); transform: scale(1.2);
+        }
+        #share-card-content {
+            position: relative; z-index: 2; padding: 1.5rem;
+            background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.9) 100%);
+        }
+        .genre-badge {
+            display: inline-block; background-color: rgba(255,255,255,0.1);
+            border: 1px solid rgba(255,255,255,0.2); color: #FFFFFF;
+            font-size: 0.8rem; font-weight: 500; padding: 0.3rem 0.8rem;
+            border-radius: 9999px; text-transform: capitalize;
+        }
+        .play-icon {
+            position: absolute; top: 50%; right: 1.5rem;
+            transform: translateY(-50%); opacity: 0;
+            transition: opacity 0.2s ease-in-out;
+        }
+        .list-item-card:hover .play-icon { opacity: 1; }
+    </style>
+</head>
+<body class="min-h-screen flex items-center justify-center p-4">
+    <!-- Dynamic Background Div -->
+    <div id="background-image" class="fixed inset-0 bg-cover bg-center transition-opacity duration-1000 opacity-0" style="z-index: -1; filter: blur(24px) brightness(0.5);"></div>
+
+    <!-- Login Screen -->
+    <div id="login-screen" class="w-full max-w-lg text-center fade-in">
+        <div class="glass-card rounded-xl p-8 md:p-12 shadow-2xl">
+            <div class="flex justify-center items-center gap-4 mb-6">
+                 <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-music-4"><path d="M9 18V5l12-2v13"/><path d="m9 18-5.24-1.11A2 2 0 0 1 2 15V6.5a2 2 0 0 1 2-2.19L9 5v13Z"/><path d="M21 16a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"/><path d="M9 13a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"/></svg>
+                <h1 class="text-4xl font-bold">My Music DNA</h1>
+            </div>
+            <p class="text-neutral-400 mb-8">Log in to discover your listening habits and get an AI-powered analysis of your music taste.</p>
+            <div class="space-y-4">
+                <button id="login-button" class="spotify-green text-white font-bold py-3 px-8 rounded-full w-full text-lg transition duration-300 transform hover:scale-105 flex items-center justify-center gap-3">
+                    <svg role="img" width="24" height="24" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg"><path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.235 13.313c-2.43.243-4.86-.97-5.347-1.457-.39-.39.39-2.333 1.166-3.11.777-.777 2.723-1.557 3.113-1.167.49.487 1.703 2.917 1.07 5.734zm-1.89-6.326c-.49-.49-2.333.39-3.11 1.167-.777-.777-1.557 2.723-1.167 3.113.487.487 2.917 1.703 5.734 1.07-2.817-2.817.58-5.86-1.457-5.35z"/></svg>
+                    <span>Login with Spotify</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Screen (Initially Hidden) -->
+    <div id="main-content" class="w-full max-w-4xl hidden fade-in">
+        <header class="glass-card flex flex-col sm:flex-row justify-between items-center mb-8 p-4 rounded-xl">
+            <div class="flex items-center gap-3 mb-4 sm:mb-0">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-music-4"><path d="M9 18V5l12-2v13"/><path d="m9 18-5.24-1.11A2 2 0 0 1 2 15V6.5a2 2 0 0 1 2-2.19L9 5v13Z"/><path d="M21 16a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"/><path d="M9 13a2 2 0 1 1-4 0 2 2 0 0 1 4 0Z"/></svg>
+                <h1 class="text-3xl font-bold">My Music DNA</h1>
+            </div>
+            <div class="flex items-center gap-4">
+                <div class="text-right">
+                    <p id="display-name" class="font-semibold">Loading...</p>
+                    <button id="logout-button" class="text-sm text-neutral-400 hover:text-white">Log out</button>
+                </div>
+                <img id="profile-pic" src="https://placehold.co/40x40/181818/181818?text=S" alt="Profile Picture" class="w-10 h-10 rounded-full bg-neutral-800">
+            </div>
+        </header>
+
+        <main>
+             <div class="flex flex-col sm:flex-row justify-between items-center gap-4 mb-6">
+                <div class="flex items-center p-1 rounded-full glass-card">
+                    <button class="data-type-btn active-filter px-4 py-1.5 text-sm font-semibold rounded-full transition-colors" data-type="artists">Artists</button>
+                    <button class="data-type-btn inactive-filter px-4 py-1.5 text-sm font-semibold rounded-full transition-colors" data-type="tracks">Tracks</button>
+                    <button class="data-type-btn inactive-filter px-4 py-1.5 text-sm font-semibold rounded-full transition-colors" data-type="genres">Genres</button>
+                </div>
+                <div class="flex items-center p-1 rounded-full glass-card">
+                    <button class="time-range-btn active-filter px-4 py-1.5 text-sm font-semibold rounded-full transition-colors" data-range="short_term">4 Weeks</button>
+                    <button class="time-range-btn inactive-filter px-4 py-1.5 text-sm font-semibold rounded-full transition-colors" data-range="medium_term">6 Months</button>
+                    <button class="time-range-btn inactive-filter px-4 py-1.5 text-sm font-semibold rounded-full transition-colors" data-range="long_term">All Time</button>
+                </div>
+            </div>
+            
+            <div class="my-6 text-center">
+                 <button id="summary-card-button" class="gemini-blue text-white font-semibold py-2 px-6 rounded-full transition duration-300 transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                    <i data-lucide="image"></i>
+                    <span>Generate Summary Card</span>
+                </button>
+            </div>
+
+            <div id="content-list" class="space-y-3"></div>
+
+            <!-- Create Playlist Button (Only shown for tracks) -->
+            <div id="create-playlist-container" class="mt-6 text-center hidden">
+                <button id="create-playlist-button" class="spotify-green text-white font-semibold py-2 px-6 rounded-full transition duration-300 transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                     <i data-lucide="plus-circle"></i>
+                    <span>Create Playlist on Spotify</span>
+                </button>
+            </div>
+        </main>
+    </div>
+
+    <!-- AI Summary Modal -->
+    <div id="ai-modal" class="fixed inset-0 modal-backdrop flex items-center justify-center p-4 hidden fade-in">
+        <div class="glass-card rounded-xl p-6 md:p-8 max-w-md w-full relative shadow-2xl">
+            <button id="close-modal-button" class="absolute top-4 right-4 text-neutral-500 hover:text-white">
+                <i data-lucide="x"></i>
+            </button>
+            <div id="modal-content" class="text-center"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        lucide.createIcons();
+
+        const CLIENT_ID = "cfda3d4f47ec466190212bbfa1b31476";
+        const REDIRECT_URI = "http://127.0.0.1:5500/index.html";
+        
+        const firebaseConfig = {
+            apiKey: "AIzaSyC0wvgOR6z_yBAe8gUZO7wzXnJLWaN0vXw",
+            authDomain: "my-music-dna.firebaseapp.com",
+            projectId: "my-music-dna",
+            storageBucket: "my-music-dna.firebasestorage.app",
+            messagingSenderId: "227917872926",
+            appId: "1:227917872926:web:526205d78e4d8b149e130f",
+            measurementId: "G-T5DNQC5K80"
+        };
+
+        let db;
+        try {
+            const app = window.firebase.initializeApp(firebaseConfig);
+            db = window.firebase.getFirestore(app);
+        } catch (e) { console.error("Firebase initialization failed.", e); }
+
+        const loginScreen = document.getElementById('login-screen');
+        const mainContent = document.getElementById('main-content');
+        const loginButton = document.getElementById('login-button');
+        const logoutButton = document.getElementById('logout-button');
+        const displayName = document.getElementById('display-name');
+        const profilePic = document.getElementById('profile-pic');
+        const contentList = document.getElementById('content-list');
+        const dataTypeButtons = document.querySelectorAll('.data-type-btn');
+        const timeRangeButtons = document.querySelectorAll('.time-range-btn');
+        const summaryCardButton = document.getElementById('summary-card-button');
+        const createPlaylistContainer = document.getElementById('create-playlist-container');
+        const createPlaylistButton = document.getElementById('create-playlist-button');
+        const aiModal = document.getElementById('ai-modal');
+        const modalContent = document.getElementById('modal-content');
+        const closeModalButton = document.getElementById('close-modal-button');
+        const backgroundDiv = document.getElementById('background-image');
+        
+        let accessToken = null;
+        let currentDataType = 'artists';
+        let currentTimeRange = 'short_term';
+        let userId = null;
+        let userProfile = {};
+        let previousSnapshot = null;
+
+        const generateRandomString = (length) => {
+            const possible = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
+            const values = crypto.getRandomValues(new Uint8Array(length));
+            return values.reduce((acc, x) => acc + possible[x % possible.length], "");
+        };
+
+        const sha256 = async (plain) => {
+            const encoder = new TextEncoder();
+            const data = encoder.encode(plain);
+            return window.crypto.subtle.digest('SHA-256', data);
+        };
+
+        const base64encode = (input) => {
+            return btoa(String.fromCharCode(...new Uint8Array(input)))
+                .replace(/=/g, '').replace(/\+/g, '-').replace(/\//g, '_');
+        };
+
+        async function generateCodeChallenge(codeVerifier) {
+            const hashed = await sha256(codeVerifier);
+            return base64encode(hashed);
+        }
+
+        async function getToken(code) {
+            const codeVerifier = localStorage.getItem('code_verifier');
+            const response = await fetch('https://accounts.spotify.com/api/token', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded', },
+                body: new URLSearchParams({
+                    client_id: CLIENT_ID,
+                    grant_type: 'authorization_code',
+                    code: code,
+                    redirect_uri: REDIRECT_URI,
+                    code_verifier: codeVerifier,
+                }),
+            });
+            const data = await response.json();
+            return data.access_token;
+        }
+
+        async function fetchUserProfile() {
+            const response = await fetch('https://api.spotify.com/v1/me', {
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            });
+            const data = await response.json();
+            userId = data.id;
+            userProfile = data; // Store full profile
+            return data;
+        }
+        
+        async function fetchTopItems(type, timeRange) {
+            const response = await fetch(`https://api.spotify.com/v1/me/top/${type}?time_range=${timeRange}&limit=50`, {
+                headers: { 'Authorization': 'Bearer ' + accessToken }
+            });
+            return await response.json();
+        }
+
+        async function saveSnapshot(type, timeRange, items) {
+            if (!db || !userId) return;
+            const docRef = window.firebase.doc(db, "snapshots", `${userId}_${type}_${timeRange}`);
+            const dataToSave = {
+                items: items.map(item => item.id),
+                timestamp: new Date()
+            };
+            await window.firebase.setDoc(docRef, dataToSave);
+        }
+
+        async function loadPreviousSnapshot(type, timeRange) {
+            if (!db || !userId) return null;
+            const docRef = window.firebase.doc(db, "snapshots", `${userId}_${type}_${timeRange}`);
+            const docSnap = await window.firebase.getDoc(docRef);
+            if (docSnap.exists()) {
+                const data = docSnap.data();
+                const rankMap = new Map();
+                data.items.forEach((id, index) => {
+                    rankMap.set(id, index + 1);
+                });
+                return rankMap;
+            }
+            return null;
+        }
+
+        function getRankChange(currentRank, previousRankMap, itemId) {
+            if (!previousRankMap) return '<span class="rank-change rank-new">●</span>';
+            const oldRank = previousRankMap.get(itemId);
+            if (!oldRank) return '<span class="rank-change rank-new">●</span>';
+            if (currentRank < oldRank) return `<span class="rank-change rank-up">↑</span>`;
+            if (currentRank > oldRank) return `<span class="rank-change rank-down">↓</span>`;
+            return '<span class="rank-change rank-same">-</span>';
+        }
+
+        function displayArtists(artists, previousRankMap) {
+            createPlaylistContainer.classList.add('hidden');
+            const hasData = artists && artists.length > 0;
+            summaryCardButton.disabled = !hasData;
+            if (!hasData) {
+                contentList.innerHTML = `<div class="glass-card p-8 text-center text-neutral-400 fade-in rounded-xl">No top artists found.</div>`;
+                return;
+            }
+            contentList.innerHTML = artists.map((artist, index) => `
+                <div class="glass-card list-item-card p-4 rounded-lg flex items-center gap-4 fade-in relative" style="animation-delay: ${index * 30}ms">
+                    <span class="text-xl font-bold text-neutral-500 w-6 text-center">${index + 1}</span>
+                    ${getRankChange(index + 1, previousRankMap, artist.id)}
+                    <img src="${artist.images[2]?.url || 'https://placehold.co/64x64/181818/FFFFFF?text=?'}" alt="${artist.name}" class="w-16 h-16 rounded-md">
+                    <div class="flex-grow">
+                        <p class="font-bold text-lg">${artist.name}</p>
+                        <div class="text-sm text-neutral-400 capitalize">${artist.genres.slice(0, 3).join(', ')}</div>
+                    </div>
+                    <a href="${artist.external_urls.spotify}" target="_blank" class="play-icon text-neutral-400 hover:text-white">
+                        <i data-lucide="play-circle" class="w-8 h-8"></i>
+                    </a>
+                </div>
+            `).join('');
+            lucide.createIcons();
+        }
+
+        function displayTracks(tracks, previousRankMap) {
+            const hasData = tracks && tracks.length > 0;
+            summaryCardButton.disabled = true;
+            createPlaylistContainer.classList.toggle('hidden', !hasData);
+            if (!hasData) {
+                contentList.innerHTML = `<div class="glass-card p-8 text-center text-neutral-400 fade-in rounded-xl">No top tracks found.</div>`;
+                return;
+            }
+            contentList.innerHTML = tracks.map((track, index) => `
+                <div class="glass-card list-item-card p-4 rounded-lg flex items-center gap-4 fade-in relative" style="animation-delay: ${index * 30}ms">
+                    <span class="text-xl font-bold text-neutral-500 w-6 text-center">${index + 1}</span>
+                    ${getRankChange(index + 1, previousRankMap, track.id)}
+                    <img src="${track.album.images[2]?.url || 'https://placehold.co/64x64/181818/FFFFFF?text=?'}" alt="${track.name}" class="w-16 h-16 rounded-md">
+                    <div class="flex-grow">
+                        <p class="font-bold text-lg">${track.name}</p>
+                        <p class="text-sm text-neutral-400">${track.artists.map(a => a.name).join(', ')}</p>
+                    </div>
+                     <a href="${track.external_urls.spotify}" target="_blank" class="play-icon text-neutral-400 hover:text-white">
+                        <i data-lucide="play-circle" class="w-8 h-8"></i>
+                    </a>
+                </div>
+            `).join('');
+             lucide.createIcons();
+        }
+
+        function displayGenres(artists) {
+            createPlaylistContainer.classList.add('hidden');
+            const hasData = artists && artists.length > 0;
+            summaryCardButton.disabled = !hasData;
+            if (!hasData) {
+                contentList.innerHTML = `<div class="glass-card p-8 text-center text-neutral-400 fade-in rounded-xl">No top genres found.</div>`;
+                return;
+            }
+            const genreCounts = {};
+            artists.forEach(artist => artist.genres.forEach(genre => {
+                genreCounts[genre] = (genreCounts[genre] || 0) + 1;
+            }));
+            const sortedGenres = Object.entries(genreCounts).sort(([,a],[,b]) => b-a).slice(0, 20);
+            if (sortedGenres.length === 0) {
+                contentList.innerHTML = `<div class="glass-card p-8 text-center text-neutral-400 fade-in rounded-xl">No top genres found.</div>`;
+                return;
+            }
+            const totalCount = sortedGenres.reduce((sum, [, count]) => sum + count, 0);
+            const colors = ['bg-red-500', 'bg-blue-500', 'bg-green-500', 'bg-yellow-500', 'bg-purple-500', 'bg-pink-500', 'bg-indigo-500', 'bg-teal-500', 'bg-orange-500'];
+            contentList.innerHTML = `<div class="glass-card p-4 rounded-lg fade-in"><div class="genre-treemap">${sortedGenres.map(([genre, count], index) => `<div class="${colors[index % colors.length]} genre-block" style="flex-grow: ${Math.round((count / totalCount) * 100 * 2)};"><span class="${((count/totalCount)*100) > 10 ? 'text-lg' : 'text-sm'}">${genre}</span></div>`).join('')}</div></div>`;
+        }
+
+        async function updateContent() {
+            const loadingSkeleton = `<div class="glass-card p-4 rounded-lg flex items-center gap-4 animate-pulse"><div class="w-16 h-16 bg-neutral-700 rounded-md"></div><div class="flex-grow space-y-2"><div class="w-3/4 h-4 bg-neutral-700 rounded"></div><div class="w-1/2 h-3 bg-neutral-700 rounded"></div></div></div>`.repeat(5);
+            contentList.innerHTML = loadingSkeleton;
+            createPlaylistContainer.classList.add('hidden');
+
+            const fetchType = currentDataType === 'genres' ? 'artists' : currentDataType;
+            previousSnapshot = await loadPreviousSnapshot(fetchType, currentTimeRange);
+            const data = await fetchTopItems(fetchType, currentTimeRange);
+            
+            if (!data || data.error) {
+                contentList.innerHTML = `<p class="text-center text-neutral-400">Could not fetch data: ${data?.error?.message || 'Unknown'}</p>`;
+                return;
+            }
+            
+            if (data.items && data.items.length > 0) {
+                await saveSnapshot(fetchType, currentTimeRange, data.items);
+            }
+
+            switch (currentDataType) {
+                case 'artists': displayArtists(data.items, previousSnapshot); break;
+                case 'tracks': displayTracks(data.items, previousSnapshot); break;
+                case 'genres': displayGenres(data.items); break;
+            }
+        }
+
+        async function handleSummaryCardClick() {
+            modalContent.innerHTML = `<div class="spinner mx-auto"></div><p class="mt-4 text-neutral-400">Generating your card...</p>`;
+            aiModal.classList.remove('hidden');
+
+            const [artistData, trackData] = await Promise.all([
+                fetchTopItems('artists', 'long_term'),
+                fetchTopItems('tracks', 'long_term')
+            ]);
+            
+            if (!artistData?.items?.length || !trackData?.items?.length) {
+                modalContent.innerHTML = `<h2 class="text-2xl font-bold mb-4">Could Not Generate Card</h2><p>Not enough "All Time" listening data available.</p>`;
+                return;
+            }
+
+            const topTracks = trackData.items.slice(0, 3);
+            const topArtists = artistData.items.slice(0, 3);
+            const albumArtUrl = topTracks[0].album.images[0].url;
+
+            const genreCounts = {};
+            artistData.items.forEach(a => a.genres.forEach(g => { genreCounts[g] = (genreCounts[g] || 0) + 1; }));
+            const topGenres = Object.entries(genreCounts).sort(([,a],[,b]) => b-a).slice(0, 3).map(([g]) => g);
+
+            modalContent.innerHTML = `
+                <div id="share-card-container">
+                    <div id="share-card-bg"></div>
+                    <div id="share-card-content" class="space-y-6">
+                        <div class="flex items-center gap-4">
+                            <img src="${userProfile.images?.[0]?.url}" class="w-16 h-16 rounded-full border-2 border-white/50 object-cover" alt="profile picture">
+                            <div>
+                                <p class="text-md text-neutral-300">My Music DNA</p>
+                                <h2 class="text-2xl font-bold leading-tight">${userProfile.display_name}</h2>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <h3 class="font-bold text-lg mb-3 text-left">Top Tracks</h3>
+                            <div class="space-y-2">
+                                ${topTracks.map(track => `
+                                    <div class="flex items-center gap-3 text-left">
+                                        <img src="${track.album.images[2].url}" class="w-12 h-12 rounded-md" />
+                                        <div>
+                                            <p class="font-semibold">${track.name}</p>
+                                            <p class="text-sm text-neutral-400">${track.artists.map(a => a.name).join(', ')}</p>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+
+                        <div>
+                             <h3 class="font-bold text-lg mb-3 text-left">Top Artists</h3>
+                             <div class="flex justify-around gap-2">
+                                ${topArtists.map(artist => `
+                                    <div class="text-center w-24 flex-shrink-0">
+                                        <img src="${artist.images[1].url}" class="w-24 h-24 rounded-full object-cover border-2 border-white/20" />
+                                        <p class="mt-2 font-semibold text-sm truncate">${artist.name}</p>
+                                    </div>
+                                `).join('')}
+                             </div>
+                        </div>
+                        
+                        <div>
+                            <h3 class="font-bold text-lg mb-3 text-center">Top Genres</h3>
+                            <div class="flex justify-center gap-2 flex-wrap">
+                                ${topGenres.map(genre => `<span class="genre-badge">${genre}</span>`).join('')}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <button id="download-share-card" class="mt-6 gemini-blue text-white font-semibold py-2 px-6 rounded-full transition duration-300 transform hover:scale-105 flex items-center justify-center gap-2 mx-auto">
+                    <i data-lucide="download"></i>
+                    <span>Download Image</span>
+                </button>
+            `;
+            document.getElementById('share-card-bg').style.backgroundImage = `url(${albumArtUrl})`;
+            lucide.createIcons();
+            document.getElementById('download-share-card').addEventListener('click', handleShareClick);
+        }
+
+        async function handleCreatePlaylistClick() {
+            modalContent.innerHTML = `<div class="spinner mx-auto"></div><p class="mt-4 text-neutral-400">Creating playlist...</p>`;
+            aiModal.classList.remove('hidden');
+            const trackData = await fetchTopItems('tracks', currentTimeRange);
+            if (!trackData?.items?.length) {
+                modalContent.innerHTML = `<h2 class="text-2xl font-bold mb-4">Error</h2><p>Could not fetch tracks.</p>`;
+                return;
+            }
+            const timeRangeText = { short_term: 'Top Tracks (4 Weeks)', medium_term: 'Top Tracks (6 Months)', long_term: 'All Time Top Tracks' }[currentTimeRange];
+            const playlistName = `${timeRangeText} - My Music DNA`;
+            const trackUris = trackData.items.map(track => track.uri);
+            try {
+                const createPlaylistResponse = await fetch(`https://api.spotify.com/v1/users/${userId}/playlists`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ name: playlistName, description: `Created by My Music DNA.`, public: false })
+                });
+                if (!createPlaylistResponse.ok) throw new Error('Failed to create playlist.');
+                const newPlaylist = await createPlaylistResponse.json();
+                await fetch(`https://api.spotify.com/v1/playlists/${newPlaylist.id}/tracks`, {
+                    method: 'POST',
+                    headers: { 'Authorization': 'Bearer ' + accessToken, 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ uris: trackUris })
+                });
+                modalContent.innerHTML = `<h2 class="text-2xl font-bold mb-4">Success!</h2><p class="mb-6">Your playlist "${playlistName}" has been created.</p><a href="${newPlaylist.external_urls.spotify}" target="_blank" class="spotify-green text-white font-bold py-3 px-8 rounded-full inline-block transition transform hover:scale-105">Open on Spotify</a>`;
+            } catch (error) {
+                console.error("Error creating playlist:", error);
+                modalContent.innerHTML = `<h2 class="text-2xl font-bold mb-4">Error</h2><p>Could not create your playlist.</p>`;
+            }
+        }
+        
+        async function handleShareClick() {
+            const cardElement = document.getElementById('share-card-container');
+            if (!cardElement) return;
+            const button = document.getElementById('download-share-card');
+            button.innerHTML = `<div class="spinner mx-auto h-5 w-5"></div><span>Generating...</span>`;
+            button.disabled = true;
+            try {
+                const canvas = await html2canvas(cardElement, { 
+                    backgroundColor: '#181818',
+                    useCORS: true,
+                    allowTaint: true
+                });
+                const imageURL = canvas.toDataURL('image/png');
+                const downloadLink = document.createElement('a');
+                downloadLink.href = imageURL;
+                downloadLink.download = 'my-music-dna.png';
+                document.body.appendChild(downloadLink);
+                downloadLink.click();
+                document.body.removeChild(downloadLink);
+            } catch(e) {
+                console.error("Error generating share card:", e);
+                modalContent.innerHTML = `<h2 class="text-2xl font-bold mb-4">Image Error</h2><p>Could not generate image. Your browser may be blocking cross-origin images.</p>`;
+            } finally {
+                 button.innerHTML = `<i data-lucide="download"></i><span>Download Image</span>`;
+                 lucide.createIcons();
+                 button.disabled = false;
+            }
+        }
+
+        async function updateBackground(data) {
+            if (data?.items?.length) {
+                const topItem = data.items[0];
+                const imageUrl = topItem.album ? topItem.album.images[0].url : topItem.images[0].url;
+                if(imageUrl) {
+                    backgroundDiv.style.backgroundImage = `url(${imageUrl})`;
+                    backgroundDiv.style.opacity = '1';
+                }
+            } else {
+                 backgroundDiv.style.opacity = '0';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            const params = new URLSearchParams(window.location.search);
+            const code = params.get('code');
+            if (code) {
+                accessToken = await getToken(code);
+                const url = new URL(window.location.href);
+                url.search = '';
+                history.pushState({}, '', url);
+            }
+            if (accessToken) {
+                loginScreen.style.display = 'none';
+                mainContent.style.display = 'block';
+                const profile = await fetchUserProfile();
+                displayName.textContent = profile.display_name;
+                profilePic.src = profile.images?.[0]?.url || `https://placehold.co/40x40/1ED760/FFFFFF?text=${profile.display_name.charAt(0).toUpperCase()}`;
+                
+                const topArtistData = await fetchTopItems('artists', 'long_term');
+                updateBackground(topArtistData);
+                
+                updateContent();
+            } else {
+                loginScreen.style.display = 'block';
+                mainContent.style.display = 'none';
+            }
+        });
+
+        const redirectToSpotifyLogin = async () => {
+            const codeVerifier = generateRandomString(64);
+            localStorage.setItem('code_verifier', codeVerifier);
+            const codeChallenge = await generateCodeChallenge(codeVerifier);
+            const scope = 'user-top-read playlist-modify-private';
+            const url = new URL('https://accounts.spotify.com/authorize');
+            url.search = new URLSearchParams({
+                response_type: 'code',
+                client_id: CLIENT_ID,
+                scope: scope,
+                redirect_uri: REDIRECT_URI,
+                code_challenge_method: 'S256',
+                code_challenge: codeChallenge,
+            });
+            window.location = url;
+        };
+
+        const logout = () => {
+            accessToken = null;
+            userId = null;
+            userProfile = {};
+            previousSnapshot = null;
+            localStorage.removeItem('code_verifier');
+            window.location = REDIRECT_URI.split('?')[0];
+        };
+        
+        dataTypeButtons.forEach(button => button.addEventListener('click', () => {
+            currentDataType = button.dataset.type;
+            const isTrackView = currentDataType === 'tracks';
+            summaryCardButton.disabled = isTrackView;
+            dataTypeButtons.forEach(btn => btn.classList.replace('active-filter', 'inactive-filter'));
+            button.classList.replace('inactive-filter', 'active-filter');
+            updateContent();
+        }));
+
+        timeRangeButtons.forEach(button => button.addEventListener('click', () => {
+            currentTimeRange = button.dataset.range;
+            timeRangeButtons.forEach(btn => btn.classList.replace('active-filter', 'inactive-filter'));
+            button.classList.replace('inactive-filter', 'active-filter');
+            updateContent();
+        }));
+
+        loginButton.addEventListener('click', redirectToSpotifyLogin);
+        logoutButton.addEventListener('click', logout);
+        summaryCardButton.addEventListener('click', handleSummaryCardClick);
+        createPlaylistButton.addEventListener('click', handleCreatePlaylistClick);
+        closeModalButton.addEventListener('click', () => aiModal.classList.add('hidden'));
+        aiModal.addEventListener('click', (e) => {
+            if (e.target === aiModal) aiModal.classList.add('hidden');
+        });
+    </script>
+</body>
+</html>
+
+
+
+
