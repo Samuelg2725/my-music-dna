@@ -390,7 +390,7 @@
         }
 
         async function updateContent() {
-            const loadingSkeleton = `<div class="glass-card p-4 rounded-lg flex items-center gap-4 animate-pulse"><div class="w-16 h-16 bg-neutral-700 rounded-md"></div><div class="flex-grow space-y-2"><div class="w-3_4 h-4 bg-neutral-700 rounded"></div><div class="w-1/2 h-3 bg-neutral-700 rounded"></div></div></div>`.repeat(5);
+            const loadingSkeleton = `<div class="glass-card p-4 rounded-lg flex items-center gap-4 animate-pulse"><div class="w-16 h-16 bg-neutral-700 rounded-md"></div><div class="flex-grow space-y-2"><div class="w-"w-3/4 h-4 bg-neutral-700 rounded"></div><div class="w-1/2 h-3 bg-neutral-700 rounded"></div></div></div>`.repeat(5);
             contentList.innerHTML = loadingSkeleton;
             createPlaylistContainer.classList.add('hidden');
 
@@ -643,7 +643,7 @@
         aiModal.addEventListener('click', (e) => {
             if (e.target === aiModal) aiModal.classList.add('hidden');
         });
-        
     </script>
 </body>
 </html>
+
