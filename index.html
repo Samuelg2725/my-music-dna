@@ -185,7 +185,22 @@
         lucide.createIcons();
 
         const CLIENT_ID = "cfda3d4f47ec466190212bbfa1b31476";
-        const REDIRECT_URI = window.location.origin + window.location.pathname;
+        // Build a redirect URI that always matches the Spotify setting
+        function normalizedRedirectUri() {
+            const url = new URL(window.location.href);
+            url.search = ''; // drop ?code=... etc
+            url.hash = '';   // drop #...
+        // If we're on .../index.html, strip it to the folder path
+        if (url.pathname.endsWith('index.html')) {
+            url.pathname = url.pathname.slice(0, -'index.html'.length);
+            }
+        // Ensure trailing slash for folder URLs
+        if (!url.pathname.endsWith('/')) {
+            url.pathname += '/';
+        }
+        return url.origin + url.pathname; // e.g. https://samuelg2725.github.io/my-music-dna/
+    }
+    const REDIRECT_URI = normalizedRedirectUri();
         
         const firebaseConfig = {
             apiKey: "AIzaSyC0wvgOR6z_yBAe8gUZO7wzXnJLWaN0vXw",
@@ -616,7 +631,7 @@
             userProfile = {};
             previousSnapshot = null;
             localStorage.removeItem('code_verifier');
-            window.location = window.location.origin + window.location.pathname;
+            window.location =  REDIRECT_URI;
         };
         
         dataTypeButtons.forEach(button => button.addEventListener('click', () => {
